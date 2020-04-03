@@ -145,6 +145,27 @@
         border-color: #666666;
         cursor: pointer;
       }
+      #popup-title {
+        font-size: 16px;
+      }
+      #popup-text {
+        font-size: 13px;
+      }
+      .mapboxgl-popup {
+        padding: 10px;
+      }
+      .mapboxgl-popup-content {
+        font-family: sans-serif;
+        padding: 10px;
+      }
+      .marker {
+        background-image: url('pin.png');
+        background-size: cover;
+        width: 35px;
+        height: 35px;
+        border-radius: 50%;
+        cursor: pointer;
+      }
     </style>
   </head>
   <body>
@@ -185,6 +206,8 @@
       var addressWarning = document.getElementById("address-warning");
 
       //set initial values
+      var healthcareFacilities;
+      var foundFeatures = false;
       serviceTypes = ['Community Health Centre', 'Hospital', 'Independent Health Facility', 'Pharmacy', 'Senior Active Living Centre',];
       transportTypes = ['driving-traffic', 'walking'];
       var pointsToRoute = [];
@@ -205,15 +228,17 @@
         promptScreen.style.display = "none"
 
         //get all healthcare facility points
-        var healthcareFacilities = map.querySourceFeatures('healthcare-facilities', {sourcelayer: 'healthcare-facilities'});
+        // var healthcareFacilities = map.querySourceFeatures('healthcare-facilities');
         console.log(healthcareFacilities)
 
         var turfCircle = turf.circle(start, 50, {steps: 50, units: 'kilometers'});
         var turfStart = turf.point(start);
         var closestInitial = 10000; 
+        var locationToRoute;
         var healthCategories = [];
         console.log(turfCircle)
 
+        console.log(healthcareFacilities)
         healthcareFacilities.forEach(location => {
           if (!healthCategories.includes(location.properties.SERVICE_TY)) {
             healthCategories.push(location.properties.SERVICE_TY);
@@ -224,9 +249,26 @@
             location.properties['within'] = true;
             pointsToRoute.push(location.geometry.coordinates);
             var distanceFromStart = turf.distance(turfStart, turfPoint);
+            console.log(closestInitial)
             if (distanceFromStart < closestInitial) {
-              closestInitial = location.geometry.coordinates;
+              closestInitial = distanceFromStart
+              locationToRoute = location.geometry.coordinates;
             }
+
+            //add pop-up
+            var properties = location.properties;
+
+            // create a HTML element for each feature
+            var el = document.createElement('div');
+            el.className = 'marker';
+
+            // make a marker for each feature and add to the map
+            new mapboxgl.Marker(el)
+              .setLngLat(location.geometry.coordinates)
+              // .setPopup(new mapboxgl.Popup({ offset: 4 }) // add popups
+              //   .setHTML('<strong id="popup-title">' + properties.ENGLISH_NA + '</strong><p id="popup-text"><strong>Address: </strong>' + properties.ADDRESS_LI + '<br><strong>Service type: </strong>' + properties.SERVICE_TY + '</p>'))
+              .addTo(map);
+
           } else {
             location.properties['within'] = false;
           }
@@ -245,7 +287,21 @@
         var withinFilter = ['==', 'within', true];
         map.setFilter('healthcare-facilities', withinFilter);
 
+        // healthcareFacilities.forEach(function(marker) {
 
+        //   var properties = marker.properties;
+
+        //   // create a HTML element for each feature
+        //   var el = document.createElement('div');
+        //   el.className = 'marker';
+
+        //   // make a marker for each feature and add to the map
+        //   new mapboxgl.Marker(el)
+        //     .setLngLat(marker.geometry.coordinates)
+        //     .setPopup(new mapboxgl.Popup({ offset: 4 }) // add popups
+        //       .setHTML('<strong id="popup-title">' + properties.ENGLISH_NA + '</strong><p id="popup-text"><strong>Address: </strong>' + properties.ADDRESS_LI + '<br><strong>Service type: </strong>' + properties.SERVICE_TY + '</p>'))
+        //     .addTo(map);
+        // });
         // map.addLayer({
         //   "id": "selectedRoad",
         //   "type": "line",
@@ -261,7 +317,7 @@
         // });
 
         if (pointsToRoute.length > 0) {
-          getRoute2(start, closestInitial, transportType.value);
+          getRoute2(start, locationToRoute, transportType.value);
         }
         
         //get routes
@@ -275,7 +331,7 @@
         container: 'map',
         style: 'mapbox://styles/mapbox/streets-v10',
         center: [-79.86689090, 43.25216289], // starting position
-        zoom: 12
+        zoom: 11
       });
 
       var geocoder = new MapboxGeocoder({ // Initialize the geocoder
@@ -363,7 +419,7 @@
           var json = JSON.parse(req.response);
           var data = json.routes[0];
           data.geometry.coordinates.push(end)
-          data.geometry.coordinates.unshift(start)
+          //data.geometry.coordinates.unshift(start)
           var route = data.geometry.coordinates;
           var geojson = {
             type: 'Feature',
@@ -432,6 +488,8 @@
       }
 
       map.on('load', function() {
+
+
         console.log('loaded')
         //geocode
         map.addSource('single-point', {
@@ -454,7 +512,7 @@
 
         map.addSource('healthcare-facilities', {
           type: 'geojson',
-          data: 'https://github.com/kieranhillier/HealthcareServiceMap/blob/master/HealthFacilitiesDeg.geojson'
+          data: 'HealthFacilitiesDeg.geojson'
         });
 
         map.addLayer({
@@ -464,8 +522,11 @@
           'paint': {
             'circle-color': '#FC7D09',
             'circle-radius': 10,
+            'circle-opacity': 0,
           }, 
         })
+
+        
 
         // map.addSource('healthcare-facilities2', {
         //   type: 'geojson',
@@ -522,6 +583,15 @@
         //     'line-opacity': 0.5
         //   }
         // });
+        map.on('idle',function(){
+          // healthcareFacilities = map.querySourceFeatures('healthcare-facilities')
+          if (!foundFeatures) {
+            healthcareFacilities = map.queryRenderedFeatures({ layers: ['healthcare-facilities'] });
+            foundFeatures = true;
+          }
+          console.log(healthcareFacilities)
+          // console.log(features)
+        })
 
         //popup for healthcare facilities
         var popup = new mapboxgl.Popup({
@@ -536,7 +606,7 @@
 
           popup
             .setLngLat(coordinates)
-            .setHTML('<strong>' + properties.ENGLISH_NA + '</strong><p>' + properties.ADDRESS_LI + '<br>' + properties.SERVICE_TY + '</p>')
+            .setHTML('<strong id="popup-title">' + properties.ENGLISH_NA + '</strong><p id="popup-text"><strong>Address: </strong>' + properties.ADDRESS_LI + '<br><strong>Service type: </strong>' + properties.SERVICE_TY + '</p>')
             .addTo(map);
         });
 
@@ -568,65 +638,67 @@
 
       });
 
-      map.on('click', function(e) {
-        var features = map.queryRenderedFeatures(e.point, { layers: ['routes'] });
-        if (features.length === 0) {
-          return;
-        }
-        var feature = features[0];
-        console.log(features)
-        console.log(feature)
-        if (typeof map.getLayer('selectedRoad') !== "undefined" ){         
-          map.removeLayer('selectedRoad')
-          map.removeSource('selectedRoad');   
-        }
+      // map.on('click', function(e) {
+      //   var features = map.queryRenderedFeatures(e.point, { layers: ['routes'] });
+      //   if (features.length === 0) {
+      //     return;
+      //   }
+      //   var feature = features[0];
+      //   console.log(features)
+      //   console.log(feature)
+      //   if (typeof map.getLayer('selectedRoad') !== "undefined" ){         
+      //     map.removeLayer('selectedRoad')
+      //     map.removeSource('selectedRoad');   
+      //   }
 
-        //get current routes
-        // var selectedCoords;
-        currentRoutes = map.getSource('routes')._data;
-        for (var x = 0; x < currentRoutes.features.length; x++) {
-          if (feature.properties.distance === currentRoutes.features[x].properties.distance && feature.properties.time === currentRoutes.features[x].properties.time) {
-            feature.geometry.coordinates = currentRoutes.features[x].geometry.coordinates;
-            feature.properties.directions = currentRoutes.features[x].properties.directions;
-          }
-        }
-        if (feature) {
-          map.addSource('selectedRoad', {
-            "type":"geojson",
-            "data": feature.toJSON()
-          });
-          map.addLayer({
-            "id": "selectedRoad",
-            "type": "line",
-            "source": "selectedRoad",
-            "layout": {
-              "line-join": "round",
-              "line-cap": "round"
-            },
-            "paint": {
-              "line-color": "green",
-              "line-width": 8
-            }
-          });
+      //   //get current routes
+      //   // var selectedCoords;
+      //   currentRoutes = map.getSource('routes')._data;
+      //   for (var x = 0; x < currentRoutes.features.length; x++) {
+      //     if (feature.properties.distance === currentRoutes.features[x].properties.distance && feature.properties.time === currentRoutes.features[x].properties.time) {
+      //       feature.geometry.coordinates = currentRoutes.features[x].geometry.coordinates;
+      //       feature.properties.directions = currentRoutes.features[x].properties.directions;
+      //     }
+      //   }
+      //   if (feature) {
+      //     map.addSource('selectedRoad', {
+      //       "type":"geojson",
+      //       "data": feature.toJSON()
+      //     });
+      //     map.addLayer({
+      //       "id": "selectedRoad",
+      //       "type": "line",
+      //       "source": "selectedRoad",
+      //       "layout": {
+      //         "line-join": "round",
+      //         "line-cap": "round"
+      //       },
+      //       "paint": {
+      //         "line-color": "green",
+      //         "line-width": 8
+      //       }
+      //     });
 
-          // get the sidebar and add the instructions
-          var instructions = document.getElementById('instructions');
-          var steps = feature.properties.directions;
-          console.log(steps)
-          var tripInstructions = [];
-          for (var i = 0; i < steps.length; i++) {
-            tripInstructions.push('<br><li>' + steps[i].maneuver.instruction) + '</li>';
-            instructions.innerHTML = '<br><span class="duration">Trip duration: ' + Math.floor(feature.properties.time / 60) + ' min</span>' + tripInstructions;
-          }
-        }
+      //     // get the sidebar and add the instructions
+      //     var instructions = document.getElementById('instructions');
+      //     var steps = feature.properties.directions;
+      //     console.log(steps)
+      //     var tripInstructions = [];
+      //     for (var i = 0; i < steps.length; i++) {
+      //       tripInstructions.push('<br><li>' + steps[i].maneuver.instruction) + '</li>';
+      //       instructions.innerHTML = '<br><span class="duration">Trip duration: ' + Math.floor(feature.properties.time / 60) + ' min</span>' + tripInstructions;
+      //     }
+      //   }
       
-      //select one route by default
-      //update destination icon
-      //add 2 second loader after clicking accept
-      //customize side of directions panel
-      //adjust geocoding api to only look in hamilton
-      //limit number of destinations shown
-      });
+      // //select one route by default
+      // //update destination icon
+      // //add 2 second loader after clicking accept
+      // //customize side of directions panel
+      // //adjust geocoding api to only look in hamilton
+      // //limit number of destinations shown
+      // });
+      // add markers to map
+
     </script>
   </body>
 </html>
