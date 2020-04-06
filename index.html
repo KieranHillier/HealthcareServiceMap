@@ -330,13 +330,13 @@
         mapboxgl: mapboxgl, // Set the mapbox-gl instance
         countries: 'ca',
         placeholder: 'Tap here to insert address', 
-        bbox: [-80.20912170410156,43.465877550055865, -79.74838256835938, 43.090453524374716], // Boundary for Hamilton
+        bbox: [-80.26885986328125, 43.087946269000135, -79.58221435546875, 43.49377906918119], // Boundary for Hamilton
       });
 
       document.getElementById('container').insertBefore(geocoder.onAdd(map), second)
 
       // set the bounds of the map
-      var bounds = [[-80.20912170410156,43.465877550055865], [-79.74838256835938, 43.090453524374716]];
+      var bounds = [[-80.26885986328125, 43.087946269000135], [-79.58221435546875, 43.49377906918119]];
       map.setMaxBounds(bounds);
 
       // initialize the map canvas to interact with later
